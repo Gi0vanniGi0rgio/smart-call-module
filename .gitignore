@@ -1,0 +1,10 @@
+*.log
+*.pyc
+__pycache__/
+*.bak
+*.ogg
+*.tar.gz
+venv/
+.env
+*password*
+*secret*

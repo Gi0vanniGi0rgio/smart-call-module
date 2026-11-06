@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Интеллектуальный обзвон</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; min-height: 100vh; }
+        header { background: #1a1a2e; color: white; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; }
+        header h1 { font-size: 18px; font-weight: 500; }
+        header .status { font-size: 12px; opacity: 0.7; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        .card { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+        h2 { font-size: 16px; margin-bottom: 12px; color: #1a1a2e; }
+        textarea { width: 100%; min-height: 200px; padding: 12px; border: 1px solid #ddd; border-radius: 6px; font-family: monospace; font-size: 13px; resize: vertical; }
+        textarea:focus { outline: 2px solid #1976d2; border-color: transparent; }
+        .buttons { margin-top: 12px; display: flex; gap: 8px; }
+        button { padding: 10px 18px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; }
+        button.primary { background: #1976d2; color: white; }
+        button.primary:hover { background: #1565c0; }
+        button.secondary { background: #f0f0f0; color: #333; }
+        button.secondary:hover { background: #e0e0e0; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .errors { background: #fff0f0; color: #b64144; padding: 12px; border-radius: 6px; margin-top: 12px; font-size: 13px; max-height: 200px; overflow-y: auto; }
+        .errors ul { margin-left: 18px; }
+        .preview-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+        .preview-table th, .preview-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #eee; vertical-align: top; }
+        .preview-table th { background: #f8f9fa; font-weight: 600; color: #666; font-size: 12px; }
+        .preview-table tr:hover { background: #f8f9fa; }
+        .preview-table td.reason-cell {
+            font-size: 12px;
+            color: #666;
+            max-width: 360px;
+            word-wrap: break-word;
+            line-height: 1.4;
+        }
+        .badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+        .badge.pending { background: #fff3e0; color: #e65100; }
+        .badge.calling { background: #e3f2fd; color: #1565c0; }
+        .badge.done { background: #e8f5e9; color: #2e7d32; }
+        .badge.stop { background: #fce4ec; color: #c62828; }
+        .tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid #ddd; }
+        .tab { padding: 10px 16px; cursor: pointer; border: none; background: none; font-size: 14px; font-weight: 500; color: #666; border-bottom: 2px solid transparent; }
+        .tab.active { color: #1976d2; border-bottom-color: #1976d2; }
+        .toast { position: fixed; bottom: 24px; right: 24px; background: #333; color: white; padding: 14px 20px; border-radius: 8px; font-size: 13px; z-index: 100; opacity: 0; transition: opacity 0.3s; }
+        .toast.show { opacity: 1; }
+        .toast.error { background: #c62828; }
+        .toast.success { background: #2e7d32; }
+        .task-item { padding: 12px; border-bottom: 1px solid #eee; cursor: pointer; }
+        .task-item:hover { background: #f8f9fa; }
+        .task-item.active { background: #e3f2fd; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🧠 Интеллектуальный обзвон</h1>
+        <div class="status" id="status">готово</div>
+    </header>
+
+    <div class="container">
+        <div class="tabs">
+            <button class="tab active" data-tab="new">Новый обзвон</button>
+            <button class="tab" data-tab="tasks">Запуски</button>
+        </div>
+
+        <div id="tab-new" class="tab-content">
+            <div class="card">
+                <h2>Вставьте список клиентов</h2>
+                <p style="color:#666; font-size:13px; margin-bottom:12px;">
+                    Скопируйте из Excel строки (2 колонки: <b>имя</b> и <b>телефон</b>) и вставьте сюда.
+                    Время звонка (HH:MM) ищем в конце строки.
+                </p>
+                <textarea id="input" placeholder="Бабич Александр Григорьевич ФЛ&#9;79184925153&#9;10:20&#10;Ленкова Татьяна Витальевна ФЛ&#9;79054683368&#9;11:00"></textarea>
+                <div class="buttons">
+                    <button class="primary" id="check">Проверить</button>
+                    <button class="primary" id="create" disabled>Запустить обзвон</button>
+                    <button class="secondary" id="clear">Очистить</button>
+                </div>
+                <div id="errors" class="errors" style="display:none;"></div>
+                <div id="preview" style="display:none;">
+                    <h2 style="margin-top:20px;">Превью (<span id="preview-count">0</span>)</h2>
+                    <table class="preview-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Имя</th>
+                                <th>Телефон</th>
+                                <th>Дедлайн</th>
+                            </tr>
+                        </thead>
+                        <tbody id="preview-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-tasks" class="tab-content" style="display:none;">
+            <div class="card">
+                <h2>Запуски</h2>
+                <div id="tasks-list">Загрузка...</div>
+            </div>
+            <div class="card" id="task-detail-card" style="display:none;">
+                <h2>Клиенты запуска <span id="task-id"></span></h2>
+                <table class="preview-table">
+                    <thead>
+                        <tr>
+                            <th>Имя</th>
+                            <th>Телефон</th>
+                            <th>Дедлайн</th>
+                            <th>Статус</th>
+                            <th>Результат</th>
+                            <th>Причина</th>
+                            <th>Попыток</th>
+                            <th>Перезвон</th>
+                        </tr>
+                    </thead>
+                    <tbody id="clients-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const input = document.getElementById('input');
+        const checkBtn = document.getElementById('check');
+        const createBtn = document.getElementById('create');
+        const clearBtn = document.getElementById('clear');
+        const errorsBox = document.getElementById('errors');
+        const previewBox = document.getElementById('preview');
+        const previewBody = document.getElementById('preview-body');
+        const previewCount = document.getElementById('preview-count');
+        const statusEl = document.getElementById('status');
+        const toast = document.getElementById('toast');
+
+        let parsedClients = [];
+        let currentTaskId = null;
+
+        function showToast(msg, kind = '') {
+            toast.textContent = msg;
+            toast.className = 'toast show ' + kind;
+            setTimeout(() => toast.className = 'toast ' + kind, 3000);
+        }
+
+        function setStatus(text) {
+            statusEl.textContent = text;
+        }
+
+        const STATUS_LABELS = {
+            pending: 'Ожидает',
+            calling: 'Звоним',
+            done: 'Завершён',
+            stop: 'Стоп',
+        };
+
+        // === Проверка списка ===
+        checkBtn.addEventListener('click', async () => {
+            const text = input.value.trim();
+            if (!text) return;
+
+            setStatus('проверка...');
+            checkBtn.disabled = true;
+            try {
+                const r = await fetch('/smart-call/api/parse', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text }),
+                });
+                const data = await r.json();
+
+                parsedClients = data.clients;
+
+                if (data.errors.length) {
+                    errorsBox.innerHTML = `<b>Ошибки (${data.errors.length}):</b><ul>${data.errors.map(e => `<li>${e}</li>`).join('')}</ul>`;
+                    errorsBox.style.display = 'block';
+                } else {
+                    errorsBox.style.display = 'none';
+                }
+
+                if (data.clients.length) {
+                    previewCount.textContent = data.clients.length;
+                    previewBody.innerHTML = data.clients.map((c, i) => `
+                        <tr>
+                            <td>${i + 1}</td>
+                            <td>${escapeHtml(c.name)}</td>
+                            <td>${c.phone}</td>
+                            <td>${String(c.deadline_h).padStart(2,'0')}:${String(c.deadline_m).padStart(2,'0')}</td>
+                        </tr>
+                    `).join('');
+                    previewBox.style.display = 'block';
+                    createBtn.disabled = false;
+                    setStatus(`${data.clients.length} валидных`);
+                } else {
+                    previewBox.style.display = 'none';
+                    createBtn.disabled = true;
+                    setStatus('нет валидных');
+                }
+            } catch (e) {
+                showToast('Ошибка: ' + e.message, 'error');
+            } finally {
+                checkBtn.disabled = false;
+            }
+        });
+
+        // === Создание задачи ===
+        createBtn.addEventListener('click', async () => {
+            const text = input.value.trim();
+            if (!text) return;
+
+            if (!confirm(`Запустить обзвон для ${parsedClients.length} клиентов?`)) return;
+
+            setStatus('создание...');
+            createBtn.disabled = true;
+            try {
+                const r = await fetch('/smart-call/api/tasks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text }),
+                });
+                const data = await r.json();
+                if (!r.ok) throw new Error(data.detail?.message || 'Ошибка');
+                showToast(`Запуск #${data.task_id}: ${data.clients_added} клиентов`, 'success');
+                input.value = '';
+                previewBox.style.display = 'none';
+                createBtn.disabled = true;
+                setStatus('готово');
+                switchTab('tasks');
+                loadTasks();
+            } catch (e) {
+                showToast('Ошибка: ' + e.message, 'error');
+            } finally {
+                createBtn.disabled = false;
+            }
+        });
+
+        clearBtn.addEventListener('click', () => {
+            input.value = '';
+            previewBox.style.display = 'none';
+            errorsBox.style.display = 'none';
+            createBtn.disabled = true;
+            setStatus('готово');
+        });
+
+        function escapeHtml(s) {
+            const d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
+
+        // === Tabs ===
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+        });
+
+        function switchTab(name) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+            document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+            document.getElementById('tab-' + name).style.display = 'block';
+            if (name === 'tasks') loadTasks();
+        }
+
+        // === Загрузка задач ===
+        async function loadTasks() {
+            setStatus('загрузка...');
+            try {
+                const r = await fetch('/smart-call/api/tasks');
+                const data = await r.json();
+                const list = document.getElementById('tasks-list');
+                if (!data.tasks.length) {
+                    list.innerHTML = '<p style="color:#999;">Пока нет запусков</p>';
+                } else {
+                    list.innerHTML = data.tasks.map(t => `
+                        <div class="task-item ${t.id === currentTaskId ? 'active' : ''}" onclick="loadTaskClients(${t.id})">
+                            <b>#${t.id}</b> · ${new Date(t.created_at).toLocaleString('ru-RU')} · 
+                            <span>${t.total_clients} клиентов</span> · 
+                            ожидает: ${t.pending}, звоним: ${t.calling}, готово: ${t.done}, стоп: ${t.stop}
+                        </div>
+                    `).join('');
+                }
+                setStatus('готово');
+            } catch (e) {
+                showToast('Ошибка: ' + e.message, 'error');
+            }
+        }
+
+        // === Загрузка клиентов задачи (с колонкой Причина) ===
+        async function loadTaskClients(taskId) {
+            currentTaskId = taskId;
+            document.getElementById('task-id').textContent = '#' + taskId;
+            document.getElementById('task-detail-card').style.display = 'block';
+            setStatus('загрузка клиентов...');
+            try {
+                const r = await fetch(`/smart-call/api/tasks/${taskId}/clients`);
+                const data = await r.json();
+                document.getElementById('clients-body').innerHTML = data.clients.map(c => `
+                    <tr>
+                        <td>${escapeHtml(c.name)}</td>
+                        <td>${c.phone}</td>
+                        <td>${String(c.deadline_h).padStart(2,'0')}:${String(c.deadline_m).padStart(2,'0')}</td>
+                        <td><span class="badge ${c.status}">${STATUS_LABELS[c.status] || c.status}</span></td>
+                        <td>${c.last_outcome || '—'}</td>
+                        <td class="reason-cell">${escapeHtml(c.last_reason || '—')}</td>
+                        <td>${c.attempts}</td>
+                        <td>${c.next_callback_at ? new Date(c.next_callback_at).toLocaleTimeString('ru-RU') : '—'}</td>
+                    </tr>
+                `).join('');
+                // Подсветить активный
+                document.querySelectorAll('.task-item').forEach(el => {
+                    el.classList.toggle('active', el.textContent.includes('#' + taskId + ' '));
+                });
+                setStatus('готово');
+            } catch (e) {
+                showToast('Ошибка: ' + e.message, 'error');
+            }
+        }
+
+        window.loadTaskClients = loadTaskClients;
+    </script>
+</body>
+</html>
